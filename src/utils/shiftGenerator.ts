@@ -1,7 +1,7 @@
-import { Staff, ShiftRule } from '../types';
+import { Staff, ShiftRule, Skill } from '../types';
 
 interface ShiftAssignment {
-  [key: string]: number[]; // staffId: assignedDays[]
+  [key: string]: number[];
 }
 
 interface StaffScore {
@@ -9,6 +9,7 @@ interface StaffScore {
   score: number;
 }
 
+// 通常のシフト生成アルゴリズム
 export function generateShifts(
   staff: Staff[],
   rules: ShiftRule[],
@@ -18,48 +19,50 @@ export function generateShifts(
   const assignments: ShiftAssignment = {};
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   
-  // 各スタッフの初期化
   staff.forEach(member => {
     assignments[member.id] = [];
   });
 
-  // 各日付に対してシフトを割り当て
   for (let day = 1; day <= daysInMonth; day++) {
     const date = new Date(year, month, day);
     const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+    const isFriday = date.getDay() === 5;
     const rule = rules.find(r => r.dayType === (isWeekend ? 'weekend' : 'weekday'))!;
     
-    // スタッフごとのスコアを計算
     const staffScores: StaffScore[] = staff
       .filter(member => {
         const currentAssignments = assignments[member.id].length;
         const isAvailable = !member.unavailableDays.includes(day);
         const hasCapacity = currentAssignments < member.maxShifts;
-        return isAvailable && hasCapacity;
+        const hasRequiredSkills = !isFriday || 
+          !rule.requiredSkills?.friday ||
+          rule.requiredSkills.friday.some(skill => member.skills.includes(skill));
+        return isAvailable && hasCapacity && hasRequiredSkills;
       })
       .map(member => {
         let score = 0;
         
-        // 希望日であればスコアを大幅に増加
         if (member.preferences.preferredDays.includes(day)) {
           score += 100;
         }
 
-        // 希望シフト数に近づくようにスコアを調整
         const currentShifts = assignments[member.id].length;
         const remainingDesiredShifts = member.preferences.preferredShiftsCount - currentShifts;
         if (remainingDesiredShifts > 0) {
           score += 50;
         }
 
-        // 連続勤務を避けるためのペナルティ
         const yesterdayAssigned = assignments[member.id].includes(day - 1);
         if (yesterdayAssigned) {
           score -= 30;
         }
 
-        // 公平性のために、現在のシフト数が少ないスタッフを優先
         score += (member.maxShifts - currentShifts) * 10;
+
+        // スキルボーナス
+        if (isFriday && member.skills.includes('leader')) {
+          score += 40;
+        }
 
         return {
           staffId: member.id,
@@ -67,10 +70,8 @@ export function generateShifts(
         };
       });
 
-    // スコアの高い順にソート
     staffScores.sort((a, b) => b.score - a.score);
 
-    // 必要な人数を割り当て
     const requiredStaff = Math.max(
       rule.minStaff,
       Math.min(rule.maxStaff, staffScores.length)
@@ -80,7 +81,6 @@ export function generateShifts(
       .slice(0, requiredStaff)
       .map(score => score.staffId);
 
-    // 割り当ての保存
     selectedStaff.forEach(staffId => {
       assignments[staffId].push(day);
     });
@@ -89,12 +89,77 @@ export function generateShifts(
   return assignments;
 }
 
-// 配列をシャッフルするヘルパー関数
-function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+// 代替シフト生成アルゴリズム（スキルバランスを重視）
+export function generateAlternativeShifts(
+  staff: Staff[],
+  rules: ShiftRule[],
+  year: number,
+  month: number
+): ShiftAssignment {
+  const assignments: ShiftAssignment = {};
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  
+  staff.forEach(member => {
+    assignments[member.id] = [];
+  });
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month, day);
+    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+    const isFriday = date.getDay() === 5;
+    const rule = rules.find(r => r.dayType === (isWeekend ? 'weekend' : 'weekday'))!;
+    
+    const staffScores: StaffScore[] = staff
+      .filter(member => {
+        const currentAssignments = assignments[member.id].length;
+        const isAvailable = !member.unavailableDays.includes(day);
+        const hasCapacity = currentAssignments < member.maxShifts;
+        const hasRequiredSkills = !isFriday || 
+          !rule.requiredSkills?.friday ||
+          rule.requiredSkills.friday.some(skill => member.skills.includes(skill));
+        return isAvailable && hasCapacity && hasRequiredSkills;
+      })
+      .map(member => {
+        let score = 0;
+        
+        // スキルバランスを重視したスコアリング
+        if (member.skills.includes('leader')) score += 30;
+        if (member.skills.includes('hall')) score += 20;
+        if (member.skills.includes('kitchen')) score += 20;
+
+        if (member.preferences.preferredDays.includes(day)) {
+          score += 50; // 希望日の重みを下げる
+        }
+
+        const currentShifts = assignments[member.id].length;
+        score += (member.maxShifts - currentShifts) * 15; // 公平性の重みを上げる
+
+        const yesterdayAssigned = assignments[member.id].includes(day - 1);
+        if (yesterdayAssigned) {
+          score -= 40; // 連続勤務のペナルティを上げる
+        }
+
+        return {
+          staffId: member.id,
+          score
+        };
+      });
+
+    staffScores.sort((a, b) => b.score - a.score);
+
+    const requiredStaff = Math.max(
+      rule.minStaff,
+      Math.min(rule.maxStaff, staffScores.length)
+    );
+    
+    const selectedStaff = staffScores
+      .slice(0, requiredStaff)
+      .map(score => score.staffId);
+
+    selectedStaff.forEach(staffId => {
+      assignments[staffId].push(day);
+    });
   }
-  return shuffled;
+
+  return assignments;
 }

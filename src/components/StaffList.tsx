@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, User, Calendar } from 'lucide-react';
-import { Staff } from '../types';
+import { Staff, Skill } from '../types';
 
 interface StaffListProps {
   staff: Staff[];
@@ -11,8 +11,12 @@ const StaffList: React.FC<StaffListProps> = ({ staff, setStaff }) => {
   const [newStaffName, setNewStaffName] = useState('');
   const [newMaxShifts, setNewMaxShifts] = useState(5);
   const [selectedStaff, setSelectedStaff] = useState<number | null>(null);
-  const [selectedDays, setSelectedDays] = useState<number[]>([]);
-  const days = Array.from({ length: 31 }, (_, i) => i + 1);
+  
+  const skillOptions: { value: Skill; label: string }[] = [
+    { value: 'hall', label: 'ホール' },
+    { value: 'kitchen', label: 'キッチン' },
+    { value: 'leader', label: 'リーダー' },
+  ];
 
   const addStaff = () => {
     if (newStaffName.trim()) {
@@ -22,6 +26,7 @@ const StaffList: React.FC<StaffListProps> = ({ staff, setStaff }) => {
           id: Date.now(),
           name: newStaffName,
           maxShifts: newMaxShifts,
+          skills: [],
           unavailableDays: [],
           preferences: {
             preferredDays: [],
@@ -38,15 +43,12 @@ const StaffList: React.FC<StaffListProps> = ({ staff, setStaff }) => {
     setStaff(staff.filter((s) => s.id !== id));
     if (selectedStaff === id) {
       setSelectedStaff(null);
-      setSelectedDays([]);
     }
   };
 
-  const togglePreferredDay = (day: number) => {
-    if (!selectedStaff) return;
-    
+  const togglePreferredDay = (staffId: number, day: number) => {
     setStaff(staff.map(s => {
-      if (s.id === selectedStaff) {
+      if (s.id === staffId) {
         const newPreferredDays = s.preferences.preferredDays.includes(day)
           ? s.preferences.preferredDays.filter(d => d !== day)
           : [...s.preferences.preferredDays, day];
@@ -63,7 +65,19 @@ const StaffList: React.FC<StaffListProps> = ({ staff, setStaff }) => {
     }));
   };
 
-  const selectedStaffMember = staff.find(s => s.id === selectedStaff);
+  const toggleSkill = (staffId: number, skill: Skill) => {
+    setStaff(staff.map(s => {
+      if (s.id === staffId) {
+        const newSkills = s.skills.includes(skill)
+          ? s.skills.filter(sk => sk !== skill)
+          : [...s.skills, skill];
+        return { ...s, skills: newSkills };
+      }
+      return s;
+    }));
+  };
+
+  const days = Array.from({ length: 31 }, (_, i) => i + 1);
 
   return (
     <div>
@@ -123,6 +137,22 @@ const StaffList: React.FC<StaffListProps> = ({ staff, setStaff }) => {
               </div>
             </div>
 
+            <div className="mt-2 flex flex-wrap gap-2">
+              {skillOptions.map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => toggleSkill(member.id, value)}
+                  className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                    member.skills.includes(value)
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-white border border-indigo-600 text-indigo-600'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {selectedStaff === member.id && (
               <div className="mt-4">
                 <h4 className="text-sm font-medium text-gray-700 mb-2">シフト希望日を選択:</h4>
@@ -130,7 +160,7 @@ const StaffList: React.FC<StaffListProps> = ({ staff, setStaff }) => {
                   {days.map((day) => (
                     <button
                       key={day}
-                      onClick={() => togglePreferredDay(day)}
+                      onClick={() => togglePreferredDay(member.id, day)}
                       className={`p-2 text-sm rounded-md transition-colors ${
                         member.preferences.preferredDays.includes(day)
                           ? 'bg-indigo-600 text-white'

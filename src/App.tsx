@@ -4,7 +4,7 @@ import StaffList from './components/StaffList';
 import ShiftCalendar from './components/ShiftCalendar';
 import ShiftRules from './components/ShiftRules';
 import { Staff, ShiftRule } from './types';
-import { generateShifts } from './utils/shiftGenerator';
+import { generateShifts, generateAlternativeShifts } from './utils/shiftGenerator';
 
 function App() {
   const [staff, setStaff] = useState<Staff[]>([
@@ -12,6 +12,7 @@ function App() {
       id: 1,
       name: '山田太郎',
       maxShifts: 5,
+      skills: ['hall', 'leader'],
       unavailableDays: [],
       preferences: { preferredDays: [], preferredShiftsCount: 5 }
     },
@@ -19,6 +20,7 @@ function App() {
       id: 2,
       name: '佐藤花子',
       maxShifts: 4,
+      skills: ['kitchen'],
       unavailableDays: [],
       preferences: { preferredDays: [], preferredShiftsCount: 4 }
     },
@@ -26,17 +28,32 @@ function App() {
       id: 3,
       name: '鈴木一郎',
       maxShifts: 3,
+      skills: ['hall', 'kitchen'],
       unavailableDays: [],
       preferences: { preferredDays: [], preferredShiftsCount: 3 }
     },
   ]);
 
   const [rules, setRules] = useState<ShiftRule[]>([
-    { id: 1, minStaff: 2, maxStaff: 4, dayType: 'weekday' },
-    { id: 2, minStaff: 3, maxStaff: 5, dayType: 'weekend' },
+    {
+      id: 1,
+      minStaff: 2,
+      maxStaff: 4,
+      dayType: 'weekday',
+      requiredSkills: {
+        friday: ['leader']
+      }
+    },
+    {
+      id: 2,
+      minStaff: 3,
+      maxStaff: 5,
+      dayType: 'weekend'
+    },
   ]);
 
   const [assignments, setAssignments] = useState<{[key: string]: number[]}>({});
+  const [alternativeAssignments, setAlternativeAssignments] = useState<{[key: string]: number[]}>({});
 
   const handleGenerateShifts = () => {
     const today = new Date();
@@ -47,6 +64,14 @@ function App() {
       today.getMonth()
     );
     setAssignments(generatedAssignments);
+
+    const alternativeGeneratedAssignments = generateAlternativeShifts(
+      staff,
+      rules,
+      today.getFullYear(),
+      today.getMonth()
+    );
+    setAlternativeAssignments(alternativeGeneratedAssignments);
   };
 
   return (
@@ -82,18 +107,27 @@ function App() {
             </div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-800">シフトカレンダー</h2>
-              <button
-                onClick={handleGenerateShifts}
-                className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
-              >
-                <Save className="h-5 w-5 mr-2" />
-                シフト生成
-              </button>
+          <div className="space-y-8">
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-800">シフトカレンダー（通常）</h2>
+                <button
+                  onClick={handleGenerateShifts}
+                  className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                >
+                  <Save className="h-5 w-5 mr-2" />
+                  シフト生成
+                </button>
+              </div>
+              <ShiftCalendar staff={staff} assignments={assignments} />
             </div>
-            <ShiftCalendar staff={staff} assignments={assignments} />
+
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-800">シフトカレンダー（代替案）</h2>
+              </div>
+              <ShiftCalendar staff={staff} assignments={alternativeAssignments} />
+            </div>
           </div>
         </div>
       </main>
